@@ -1,0 +1,319 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jul 04 10:15:26 2017
+
+@author: Tanguy
+"""
+#%% Importation des modules et mises en place des données importantes
+
+
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+from scipy import *
+from pylab import *
+import collections
+import matplotlib.pyplot as plt
+from astropy.table import Table
+from astropy.io import fits
+import os
+import numpy as np
+import numpy.ma as ma
+import requests 
+from astropy.io.votable import parse_single_table 
+from astropy.io.votable import parse
+from astropy.table import vstack, Table
+import matplotlib.pyplot as plt, numpy as np, numpy.random, scipy
+from matplotlib.colors import LogNorm
+from os import chdir
+import astropy.table as tb
+from astropy.table import unique
+
+
+homedir=os.path.expanduser('~')
+nom_du_repertoire="C:\\Users\\Tanguy\\Desktop\\Stage L3\\data"
+chdir("C:\\Users\\Tanguy\\Desktop\\Stage L3\\data")
+
+ 
+#%% Fonction de base prélevant les données de Panstarrs 
+
+def panstarrs_query(ra_deg, dec_deg, rad_deg, mindet=1, 
+                    maxsources=2000000,
+                    server=('https://archive.stsci.edu/'+
+                            'panstarrs/search.php')): 
+    """
+    Query Pan-STARRS DR1 @ MAST
+    parameters: ra_deg, dec_deg, rad_deg: RA, Dec, field 
+                                          radius in degrees
+                mindet: minimum number of detection (optional)
+                maxsources: maximum number of sources
+                server: servername
+    returns: astropy.table object
+    """
+    r = requests.get(server, 
+    params= {'RA': ra_deg, 'DEC': dec_deg, 
+             'SR': rad_deg, 'max_records': maxsources, 
+             'outputformat': 'VOTable', 
+             'ndetections': ('>%d' % mindet)}) 
+ 
+    # write query data into local file 
+    outf = open('panstarrs.xml', 'w') 
+    outf.write(r.text) 
+    outf.close() 
+ 
+    # parse local file into astropy.table object 
+    data = parse_single_table('panstarrs.xml')
+    return data.to_table(use_names_over_ids=True) 
+
+
+
+#%% Partie permettant de choisir quel secteur étudier
+
+
+#Fonction permetant d'obtenir un grand secteur complet 
+def put_coords2(Znamex,Znamey,Znamecentrex,Znamecentrey):
+    l_mapx=[]
+    S_coordsx=[]
+    for i in np.arange(*Znamex):        
+        l_mapx.append(i)
+    for i in l_mapx:
+        S_coordsx.append([i,Znamecentrex,0.4])
+        for j in np.arange(*Znamey):
+            S_coordsx.append([i,j,0.4])
+    return(S_coordsx)
+
+#Fonction créant un tableau de noms pour tous les sous-secteurs étudiés
+def put_names(Secteur,longueur_du_secteur):    
+    Names=[]
+    for i in longueur_du_secteur:
+        Names.append(str(Secteur) + str(i))
+    return(Names)    
+
+      
+
+### Informations utiles pour chaque secteur
+
+#Secteur de Taurus
+Ztaurusx=(63.69,72.69,0.4)
+Ztaurusy=(22.37,29.07,0.4)
+Ztauruscentrex=25.45
+Ztauruscentrey=67.91
+Taurus="Taurus"
+
+#Secteur de Taurus 2 (plus petit que Taurus)
+Ztaurusx2=(63.69,65.69,0.4)
+Ztaurusy2=(22.37,24.07,0.4)
+Ztauruscentrex2=23.45
+Ztauruscentrey2=63.91
+Taurus2="Taurus2"
+
+#Secteur d'Andromède
+ZAndromedax=(9.75,8.05,0.4)
+ZAndromedaY=(39.67,43.07,0.4)
+ZAndromedacentrex=41.50
+ZAndromedacentrey=10.69
+Andromeda="Andromeda"
+
+#Secteur sans extinction  
+ZSansextinctionx=(16.44,30.44,0.4)
+ZSansextinctiony=(32.08,38.28,0.4)
+ZSansextinctioncentrex=34.52
+ZSansextinctioncentrey=23.41
+ZoneSansExtinction="Zone sans extinction "
+
+#Centre galactique
+Zcentregalctiquex=(269.30,262.12,0.4)
+Zcentregalctiquey=(-31.62,-26.76,0.4)
+Zcentregalctiquecentrex=-28.39
+Zcentregalctiquecentrey=267.75
+CentreGalactique="Centre galactique "
+
+
+Taurus_coords=put_coords2(Ztaurusx,Ztaurusy,Ztauruscentrex,Ztauruscentrey)
+Taurus_name=put_names(Taurus,range(len(Taurus_coords)))  
+
+#Initialisation des données
+field_names = Taurus_name
+print(field_names)
+
+field_coords = Taurus_coords             
+print(field_coords)
+
+field_coords2 = np.array(field_coords)
+print('field_coords2=',field_coords2)
+
+#%%Prise de données finale
+
+keep = ["raMean",
+        "decMean",
+        "gMeanApMag",
+        "rMeanApMag",
+        "gMeanApMagErr",
+        "rMeanApMagErr",
+        "iMeanApMag",
+        "iMeanApMagErr",
+        "zMeanApMag",
+        "zMeanApMagErr",
+        "yMeanApMag",
+        "yMeanApMagErr"] 
+
+
+###Fonction principale recherchant les données de Pan-Starrs (long selon le secteur demandé)
+for i,field in enumerate(field_names):
+    ra = field_coords[i][0]
+    dec = field_coords[i][1]
+    size= field_coords[i][2]
+    nom_du_fichier =os.path.join(nom_du_repertoire,  field+'.votable')
+    print(nom_du_fichier)
+    if os.path.isfile(nom_du_fichier) : continue
+    catalogue = panstarrs_query(ra, dec, size)
+    catalogue.write(nom_du_fichier, format='votable',overwrite=True)
+    for key in catalogue.keys(): 
+        if key not in keep: 
+             catalogue.remove_column(key) 
+    catalogue.write(nom_du_fichier, format='votable',overwrite=True)        
+
+
+
+cat_tot = None # cette ligne doit être en dehors de la boucle
+for field in field_names:
+    nom_du_fichier =os.path.join(nom_du_repertoire,  field+'.votable')
+    #catalogue.write(nom_du_fichier, format='votable',overwrite=True)
+    #catalogue = tb.Table.read(field+'.votable')
+    cat = Table.read(nom_du_fichier)
+    if cat_tot is None:
+        cat_tot = cat.copy() # on initialise cat_tot en utilisant cat
+    else :
+        cat_tot = vstack([cat_tot, cat]) # on rajoute cat dans cat_tot
+    
+cat_tot2=unique(cat_tot,keys=['raMean','decMean'], keep='last')
+print(cat_tot2)    
+
+
+    
+#%%Graphiques
+
+###Fonctions
+#Fonction permettant de tracer une carte d'un secteur de la galaxie en densité
+def cart_tot(xdat,ydat,xyrange,bins,thresh,name):
+    hh, locx, locy = scipy.histogram2d(xdat, ydat, range=xyrange, bins=bins)
+    posx = np.digitize(xdat, locx)
+    posy = np.digitize(ydat, locy)
+    ind = (posx > 0) & (posx <= bins[0]) & (posy > 0) & (posy <= bins[1])
+    hhsub = hh[posx[ind] - 1, posy[ind] - 1] # values of the histogram where the points are
+    xdat1 = xdat[ind][hhsub < thresh] # low density points
+    ydat1 = ydat[ind][hhsub < thresh]
+    hh[hh < thresh] = np.nan # fill the areas with low density by NaNs
+    plt.figure()
+    plt.imshow(np.flipud(hh.T),cmap='jet',extent=np.array(xyrange).flatten(),
+               interpolation='none',norm=LogNorm(), origin='upper')
+    plt.colorbar()
+    xlabel('Coordonnée en Ra')
+    ylabel('Coordonnée en Dec')
+    title(u'Plan galactique des astres observés pour les environs de '+ name)   
+    plt.plot(xdat1, ydat1, '.',color='darkblue')
+    plt.show()
+
+#Fonction permettant de tracer un diagramme couleur-couleur d'un secteur donné
+def diag_tot(xdat,ydat,xyrange,bins,thresh,name,couleur1,couleur2,couleur3):
+    hh, locx, locy = scipy.histogram2d(xdat, ydat, range=xyrange, bins=bins)
+    posx = np.digitize(xdat, locx)
+    posy = np.digitize(ydat, locy)
+    ind = (posx > 0) & (posx <= bins[0]) & (posy > 0) & (posy <= bins[1])
+    hhsub = hh[posx[ind] - 1, posy[ind] - 1] 
+    xdat1 = xdat[ind][hhsub < thresh] # low density points
+    ydat1 = ydat[ind][hhsub < thresh]
+    hh[hh < thresh] = np.nan # fill the areas with low density by NaNs
+    plt.figure()
+    plt.imshow(np.flipud(hh.T),cmap='jet',extent=np.array(xyrange).flatten(),
+               interpolation='none', norm=LogNorm(),origin='upper')
+    plt.colorbar()
+    plt.gca().invert_yaxis()
+    font={'size':14}
+    matplotlib.rc('font',**font) 
+    xlabel(str(couleur1)+'-'+str(couleur2))
+    ylabel(str(couleur1)+'-'+str(couleur3))
+    title(u'Daigramme couleur-couleur des astres observés pour les environs de '+ name)   
+    plt.plot(xdat1, ydat1, '.',color='darkblue')
+    plt.show()
+
+#Fonction permettant de tracer un diagramme couleur-magnitude d'un secteur donné
+def diag_mag_tot(xdat,ydat,xyrange,bins,thresh,name,couleur1,couleur2):
+    hh, locx, locy = scipy.histogram2d(xdat, ydat, range=xyrange, bins=bins)
+    posx = np.digitize(xdat, locx)
+    posy = np.digitize(ydat, locy)
+    ind = (posx > 0) & (posx <= bins[0]) & (posy > 0) & (posy <= bins[1])
+    hhsub = hh[posx[ind] - 1, posy[ind] - 1]
+    xdat1 = xdat[ind][hhsub < thresh] # low density points
+    ydat1 = ydat[ind][hhsub < thresh]
+    hh[hh < thresh] = np.nan # fill the areas with low density by NaNs
+    plt.figure()
+    plt.imshow(np.flipud(hh.T),cmap='jet',extent=np.array(xyrange).flatten(),
+               interpolation='none',norm=LogNorm(), origin='upper')
+    plt.colorbar()
+    plt.gca().invert_yaxis()
+    font={'size':18}
+    matplotlib.rc('font',**font) 
+    xlabel(str(couleur1)+'-'+str(couleur2))
+    ylabel(str(couleur2))
+    title(u'Daigramme couleur-magnitude des astres observés pour les environs de '+ name)   
+    plt.plot(xdat1, ydat1, '.',color='darkblue')
+    plt.show()
+
+
+###Données nécessaires à chaque secteur
+
+
+#Mise en place des différents "use"
+usegr = (cat_tot['gMeanApMag'] > -999.) & (cat_tot['rMeanApMag'] > -999.)  
+usei = (cat_tot['gMeanApMag'] > -999.) & (cat_tot['iMeanApMag'] > -999.)  
+usez = (cat_tot['gMeanApMag'] > -999.) & (cat_tot['zMeanApMag'] > -999.)
+usey = (cat_tot['gMeanApMag'] > -999.) & (cat_tot['yMeanApMag'] > -999.)  
+useri = (cat_tot['rMeanApMag'] > -999.) & (cat_tot['iMeanApMag'] > -999.) 
+userz = (cat_tot['rMeanApMag'] > -999.) & (cat_tot['zMeanApMag'] > -999.)  
+usery = (cat_tot['rMeanApMag'] > -999.) & (cat_tot['yMeanApMag'] > -999.)  
+useiz = (cat_tot['iMeanApMag'] > -999.) & (cat_tot['zMeanApMag'] > -999.)  
+useiy = (cat_tot['iMeanApMag'] > -999.) & (cat_tot['yMeanApMag'] > -999.)  
+usezy = (cat_tot['zMeanApMag'] > -999.) & (cat_tot['yMeanApMag'] > -999.)  
+usegri = (cat_tot['gMeanApMag'] > -999.) & (cat_tot['rMeanApMag'] > -999.) & (cat_tot['iMeanApMag'] > -999.)
+
+
+#Mise en place des différentes opérations de couleur
+cat_tot['gr']=cat_tot['gMeanApMag']-cat_tot['rMeanApMag']
+cat_tot['gi']=cat_tot['gMeanApMag']-cat_tot['iMeanApMag'] 
+cat_tot['gz']=cat_tot['gMeanApMag']-cat_tot['zMeanApMag']
+cat_tot['gy']=cat_tot['gMeanApMag']-cat_tot['yMeanApMag']   
+cat_tot['ri']=cat_tot['rMeanApMag']-cat_tot['iMeanApMag'] 
+ 
+
+#Carte galactique aux environs de Taurus (pour cat_tot)
+xyrange = [[63,73],[21,30]] 
+bins = [250,250] 
+thresh = 3 
+N = 1e5;
+xdat=cat_tot2['raMean']
+ydat=cat_tot2['decMean']
+
+#Diagramme couleur-magnitude pour Taurus
+xTaurus=cat_tot['gr'][usegr]
+yTaurus=cat_tot['rMeanApMag'][usegr]
+xTaurusgz=cat_tot['gz'][usez]
+yTaurusz=cat_tot['zMeanApMag'][usez]
+xTaurusgy=cat_tot['gy'][usey]
+yTaurusy=cat_tot['yMeanApMag'][usey]
+xyrangeTaurus = [[-6,8],[12,28]] # data range
+xyrangeTaurusgy = [[-6,8],[10,26]]
+bins = [250,250] # number of bins
+thresh = 3  #density threshold
+
+#Diagramme couleur-couleur pour Taurus
+xcoulTaurus=cat_tot['gr'][usegri]
+ycoulTaurus=cat_tot['ri'][usegri]
+xyrangecoulTaurus=[[-6,8],[-4,8]] 
+
+diag_mag_tot(xTaurus,yTaurus,xyrangeTaurus,bins,thresh,Taurus,'g','r')
+diag_mag_tot(xTaurusgz,yTaurusz,xyrangeTaurus,bins,thresh,Taurus,'g','z')
+diag_mag_tot(xTaurusgy,yTaurusy,xyrangeTaurusgy,bins,thresh,Taurus,'g','y')
+cart_tot(xdat,ydat,xyrange,bins,thresh,Taurus)
+diag_tot(xcoulTaurus,ycoulTaurus,xyrangecoulTaurus,bins,thresh,Taurus,'g','r','i')
+
+
